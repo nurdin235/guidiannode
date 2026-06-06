@@ -1,7 +1,17 @@
 const express = require('express');
 
 const router = express.Router();
-const CONTACT_EMAIL = 'support@guardiannode.com';
+const DEFAULT_WHATSAPP_NUMBER = '237657262038';
+const configuredWhatsappNumber = String(
+  process.env.WHATSAPP_TARGET_NUMBER || DEFAULT_WHATSAPP_NUMBER
+).replace(/\D/g, '');
+const CONTACT_WHATSAPP_NUMBER =
+  configuredWhatsappNumber || DEFAULT_WHATSAPP_NUMBER;
+const CONTACT_WHATSAPP_DISPLAY = `+${CONTACT_WHATSAPP_NUMBER}`;
+const CONTACT_WHATSAPP_URL = `https://wa.me/${CONTACT_WHATSAPP_NUMBER}`;
+const DELETION_WHATSAPP_URL =
+  `${CONTACT_WHATSAPP_URL}?text=` +
+  encodeURIComponent('Guardian Node Data Deletion Request');
 const LAST_UPDATED = 'June 6, 2026';
 
 const renderPage = ({ title, summary, content }) => `<!doctype html>
@@ -79,7 +89,7 @@ const renderPage = ({ title, summary, content }) => `<!doctype html>
     <nav aria-label="Legal pages">
       <a href="/privacy-policy">Privacy Policy</a>
       <a href="/data-deletion">Data Deletion Instructions</a>
-      <a href="mailto:${CONTACT_EMAIL}">Contact Support</a>
+      <a href="${CONTACT_WHATSAPP_URL}">Contact Support on WhatsApp</a>
     </nav>
   </footer>
 </body>
@@ -98,6 +108,7 @@ const privacyPolicyPage = renderPage({
     <section>
       <h2>1. About Guardian Node</h2>
       <p>Guardian Node is a safety and emergency communication application. It helps users create and verify an account, communicate important safety information, send emergency alerts, and coordinate assistance where those features are available.</p>
+      <p>Guardian Node is operated for users in Bamenda, Cameroon.</p>
       <p>This policy applies to the Guardian Node mobile application, its backend services, and the public website pages operated for the application.</p>
     </section>
 
@@ -163,13 +174,13 @@ const privacyPolicyPage = renderPage({
 
     <section>
       <h2>8. Your choices and deletion rights</h2>
-      <p>You may request access, correction, or deletion of your Guardian Node data. To request deletion, follow the instructions on the <a href="/data-deletion">Data Deletion page</a> or email <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+      <p>You may request access, correction, or deletion of your Guardian Node data. To request deletion, follow the instructions on the <a href="/data-deletion">Data Deletion page</a> or contact Guardian Node through <a href="${CONTACT_WHATSAPP_URL}">WhatsApp at ${CONTACT_WHATSAPP_DISPLAY}</a>.</p>
       <p>Where deletion is requested, we will delete or anonymize eligible account and verification information unless limited retention is required for security, fraud prevention, emergency incident integrity, or legal reasons.</p>
     </section>
 
     <section>
       <h2>9. Contact</h2>
-      <p>Questions about this policy or Guardian Node data practices can be sent to <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+      <p>Questions about this policy or Guardian Node data practices can be sent to Guardian Node through <a href="${CONTACT_WHATSAPP_URL}">WhatsApp at ${CONTACT_WHATSAPP_DISPLAY}</a>.</p>
     </section>
   `,
 });
@@ -182,7 +193,7 @@ const dataDeletionPage = renderPage({
     <section class="notice">
       <h2>How to request deletion</h2>
       <ol>
-        <li>Email <a href="mailto:${CONTACT_EMAIL}?subject=Guardian%20Node%20Data%20Deletion%20Request">${CONTACT_EMAIL}</a> with the subject <strong>Guardian Node Data Deletion Request</strong>.</li>
+        <li>Open <a href="${DELETION_WHATSAPP_URL}">Guardian Node support on WhatsApp</a> and send the message <strong>Guardian Node Data Deletion Request</strong>.</li>
         <li>Include the registered phone number for the Guardian Node account, including its country code.</li>
         <li>State clearly that you want the account and associated personal data deleted.</li>
         <li>Respond to any reasonable identity-verification request so we can confirm that the requester controls the account. Do not send passwords, verification tokens, or unnecessary identity documents.</li>
@@ -209,12 +220,12 @@ const dataDeletionPage = renderPage({
 
     <section>
       <h2>Processing the request</h2>
-      <p>We will acknowledge a valid request and process it within a reasonable period. We may contact you if the registered phone number cannot be located or if additional confirmation is required. Once completed, access to the deleted account may no longer be possible.</p>
+      <p>We will acknowledge a valid request and complete deletion or anonymization within 30 days after identity verification, unless a longer period is required by law. We may contact you if the registered phone number cannot be located or if additional confirmation is required. Once completed, access to the deleted account may no longer be possible.</p>
     </section>
 
     <section>
       <h2>Need help?</h2>
-      <p>Send questions or deletion requests to <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>. You may also review the <a href="/privacy-policy">Guardian Node Privacy Policy</a> for more information about our data practices.</p>
+      <p>Send questions or deletion requests through <a href="${CONTACT_WHATSAPP_URL}">WhatsApp at ${CONTACT_WHATSAPP_DISPLAY}</a>. You may also review the <a href="/privacy-policy">Guardian Node Privacy Policy</a> for more information about our data practices.</p>
     </section>
   `,
 });

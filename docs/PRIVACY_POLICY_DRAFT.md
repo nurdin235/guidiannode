@@ -34,4 +34,10 @@ GuardianNode uses authenticated API requests and server-issued sessions. WhatsAp
 
 ## Contact
 
-Add your production support email, company/operator name, and postal address before publishing.
+Privacy questions and data-deletion requests can be sent to the Guardian Node
+WhatsApp business number at `+237 657 262 038`. The published policy and
+deletion instructions are maintained by the backend routes at
+`/privacy-policy` and `/data-deletion`.
+
+Obtain legal review and add a dedicated monitored privacy email or postal
+address when one becomes available.
