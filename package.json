@@ -1,0 +1,16 @@
+{
+  "name": "guidiannode",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspace=server",
+    "start": "npm start --workspace=server",
+    "test": "npm test --workspace=server"
+  }
+}

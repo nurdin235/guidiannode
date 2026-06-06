@@ -63,6 +63,10 @@ Both Railway configurations watch `server/**`; backend changes therefore
 trigger deployments whether the service uses the repository-root or
 backend-root layout.
 
+The root `package.json` also declares `server` as an npm workspace. This gives
+Railpack a Node entry point if the Railway service is configured to use
+automatic framework detection instead of the root Dockerfile.
+
 Recommended Railway configuration:
 
 ```text
