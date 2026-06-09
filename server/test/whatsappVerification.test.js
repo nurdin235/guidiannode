@@ -20,6 +20,14 @@ test('extractVerificationToken finds and normalizes GuardianNode WhatsApp tokens
   assert.equal(extractVerificationToken('please verify cm-a7k9q'), 'CM-A7K9Q');
   assert.equal(extractVerificationToken('Token: CM-3F8XZ. Thank you'), 'CM-3F8XZ');
   assert.equal(extractVerificationToken('hello without token'), null);
+  
+  // Spaced and tolerant variations
+  assert.equal(extractVerificationToken('CM-27LEG'), 'CM-27LEG');
+  assert.equal(extractVerificationToken('cm-27leg'), 'CM-27LEG');
+  assert.equal(extractVerificationToken('CM-27 LEG'), 'CM-27LEG');
+  assert.equal(extractVerificationToken('CM 27LEG'), 'CM-27LEG');
+  assert.equal(extractVerificationToken('CM 27 LEG'), 'CM-27LEG');
+  assert.equal(extractVerificationToken('hello CM-27 LEG thanks'), 'CM-27LEG');
 });
 
 test('buildWhatsappUrl uses wa.me business number format', () => {

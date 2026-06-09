@@ -19,6 +19,7 @@ class WhatsappVerificationScreen extends StatefulWidget {
     required this.whatsappUrl,
     required this.onVerified,
     required this.onRequestNew,
+    this.expiresAt,
     this.title = 'Verify with WhatsApp',
     this.subtitle =
         'Send the prepared message and GuardianNode will continue automatically.',
@@ -29,6 +30,7 @@ class WhatsappVerificationScreen extends StatefulWidget {
   final String whatsappUrl;
   final ValueChanged<Map<String, dynamic>> onVerified;
   final Future<Map<String, dynamic>> Function() onRequestNew;
+  final String? expiresAt;
   final String title;
   final String subtitle;
 
@@ -43,11 +45,20 @@ class _WhatsappVerificationScreenState
   late String _token;
   late String _whatsappUrl;
   Timer? _pollTimer;
+  Timer? _countdownTimer;
+  Timer? _lastCheckedTimer;
+
   bool _isPolling = false;
   bool _isOpeningWhatsapp = false;
   bool _isRequestingNew = false;
+  bool _whatsappOpened = false;
   String _status = 'pending';
   String _message = 'Waiting for your WhatsApp verification message.';
+
+  Duration _timeLeft = const Duration(minutes: 10);
+  DateTime? _expiryTime;
+  DateTime _lastCheckedTime = DateTime.now();
+  int _secondsElapsedSinceStart = 0;
 
   @override
   void initState() {
@@ -55,42 +66,112 @@ class _WhatsappVerificationScreenState
     _verificationId = widget.verificationId;
     _token = widget.token;
     _whatsappUrl = widget.whatsappUrl;
-    _startPolling();
+    _initExpiry();
+    _startTimers();
+    // Immediate initial poll
+    _pollStatus();
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _cancelTimers();
     super.dispose();
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollStatus();
+  void _initExpiry() {
+    try {
+      final expAt = widget.expiresAt;
+      if (expAt != null) {
+        _expiryTime = DateTime.parse(expAt).toLocal();
+        _timeLeft = _expiryTime!.difference(DateTime.now());
+        if (_timeLeft.isNegative) {
+          _timeLeft = Duration.zero;
+          _status = 'expired';
+        }
+        return;
+      }
+    } catch (e) {
+      // Fall through
+    }
+    _expiryTime = DateTime.now().add(const Duration(minutes: 10));
+    _timeLeft = const Duration(minutes: 10);
+  }
+
+  void _startTimers() {
+    _cancelTimers();
+
+    // Poll status every 3 seconds as required
     _pollTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _pollStatus(),
     );
+
+    // Expiry countdown timer every 1 second
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _secondsElapsedSinceStart++;
+        if (_expiryTime != null) {
+          _timeLeft = _expiryTime!.difference(DateTime.now());
+          if (_timeLeft.isNegative) {
+            _timeLeft = Duration.zero;
+            _status = 'expired';
+            _cancelTimers();
+            _message = 'Your verification link has expired. Please request a new one.';
+          }
+        }
+      });
+    });
+
+    // Rebuild UI every second to update "Last checked X seconds ago" dynamically
+    _lastCheckedTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
-  Future<void> _pollStatus() async {
-    if (_isPolling || _status == 'expired') {
+  void _cancelTimers() {
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _lastCheckedTimer?.cancel();
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  String _formatLastChecked() {
+    final difference = DateTime.now().difference(_lastCheckedTime).inSeconds;
+    if (difference < 4) {
+      return 'just now';
+    }
+    return '$difference seconds ago';
+  }
+
+  Future<void> _pollStatus({bool manual = false}) async {
+    if (_isPolling || (_status == 'expired' && !manual)) {
       return;
     }
 
-    _isPolling = true;
+    setState(() {
+      _isPolling = true;
+    });
 
     try {
       final response = await ApiService.getVerificationStatus(_verificationId);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _lastCheckedTime = DateTime.now();
+      });
 
       if (response['success'] != true) {
         setState(() {
-          _message =
-              response['message']?.toString() ??
+          _message = response['message']?.toString() ??
               'Verification status could not be refreshed.';
         });
         return;
@@ -99,7 +180,7 @@ class _WhatsappVerificationScreenState
       final status = response['status']?.toString() ?? 'pending';
 
       if (response['verified'] == true || status == 'verified') {
-        _pollTimer?.cancel();
+        _cancelTimers();
         final session = response['session'];
 
         if (session is Map) {
@@ -114,11 +195,11 @@ class _WhatsappVerificationScreenState
       }
 
       if (status == 'expired') {
-        _pollTimer?.cancel();
+        _cancelTimers();
         setState(() {
           _status = 'expired';
-          _message =
-              'Your verification link has expired. Please request a new one.';
+          _timeLeft = Duration.zero;
+          _message = 'Your verification link has expired. Please request a new one.';
         });
         return;
       }
@@ -127,13 +208,26 @@ class _WhatsappVerificationScreenState
         _status = status;
         _message = 'Waiting for your WhatsApp verification message.';
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = 'Connection error. Retrying...';
+        });
+      }
     } finally {
-      _isPolling = false;
+      if (mounted) {
+        setState(() {
+          _isPolling = false;
+        });
+      }
     }
   }
 
   Future<void> _openWhatsapp() async {
-    setState(() => _isOpeningWhatsapp = true);
+    setState(() {
+      _isOpeningWhatsapp = true;
+      _whatsappOpened = true;
+    });
 
     try {
       final launched = await launchUrl(
@@ -161,15 +255,12 @@ class _WhatsappVerificationScreenState
     try {
       final response = await widget.onRequestNew();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       if (response['success'] != true) {
         StatusSnackbar.show(
           context,
-          message:
-              response['message']?.toString() ??
+          message: response['message']?.toString() ??
               'A new verification link could not be created.',
           tone: StatusTone.error,
         );
@@ -179,6 +270,7 @@ class _WhatsappVerificationScreenState
       final verificationId = response['verificationId']?.toString();
       final token = response['token']?.toString();
       final whatsappUrl = response['whatsappUrl']?.toString();
+      final expiresAt = response['expiresAt']?.toString() ?? response['expires_at']?.toString();
 
       if (verificationId == null || token == null || whatsappUrl == null) {
         StatusSnackbar.show(
@@ -194,9 +286,18 @@ class _WhatsappVerificationScreenState
         _token = token;
         _whatsappUrl = whatsappUrl;
         _status = 'pending';
+        _whatsappOpened = false;
+        _secondsElapsedSinceStart = 0;
         _message = 'Waiting for your WhatsApp verification message.';
+        _lastCheckedTime = DateTime.now();
+        if (expiresAt != null) {
+          _expiryTime = DateTime.parse(expiresAt).toLocal();
+        } else {
+          _expiryTime = DateTime.now().add(const Duration(minutes: 10));
+        }
       });
-      _startPolling();
+      _startTimers();
+      _pollStatus();
     } finally {
       if (mounted) {
         setState(() => _isRequestingNew = false);
@@ -207,9 +308,9 @@ class _WhatsappVerificationScreenState
   @override
   Widget build(BuildContext context) {
     final isExpired = _status == 'expired';
+    final showWarning = !isExpired && _secondsElapsedSinceStart > 30;
 
     return AuthScaffold(
-      heroIcon: Icons.chat_bubble_outline_rounded,
       eyebrow: 'WhatsApp authentication',
       title: widget.title,
       subtitle: widget.subtitle,
@@ -260,34 +361,82 @@ class _WhatsappVerificationScreenState
               borderRadius: AppRadii.card,
               border: Border.all(color: AppColors.border),
             ),
-            child: SelectableText(
-              _token,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: AppColors.trustBlueDark,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-              ),
+            child: Column(
+              children: [
+                Text(
+                  'Verification message',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                SelectableText(
+                  _token,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: AppColors.trustBlueDark,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          const InfoBanner(
-            title: 'Link expiry',
-            message: 'This verification link expires in 10 minutes.',
+          InfoBanner(
+            title: isExpired ? 'Expired' : 'Expires in: ${_formatDuration(_timeLeft)}',
+            message: 'This verification link is active for 10 minutes.',
           ),
           const SizedBox(height: AppSpacing.md),
           StatusBanner(
             title: isExpired ? 'Expired' : 'Waiting for WhatsApp',
-            message: _message,
-            tone: isExpired ? StatusTone.warning : StatusTone.info,
+            message: showWarning
+                ? 'Still waiting. Make sure the message was sent to the GuardianNode business number (+237 6 57 26 20 38).'
+                : _message,
+            tone: isExpired ? StatusTone.warning : (showWarning ? StatusTone.warning : StatusTone.info),
           ),
+          const SizedBox(height: AppSpacing.sm),
+          if (!isExpired)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Last checked: ${_formatLastChecked()}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Checking every 3 seconds',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: AppSpacing.xl),
           PrimaryButton(
-            text: 'Verify via WhatsApp',
+            text: _whatsappOpened ? 'Open WhatsApp again' : 'Verify via WhatsApp',
             icon: Icons.chat_rounded,
             isLoading: _isOpeningWhatsapp,
             onPressed: isExpired ? null : _openWhatsapp,
           ),
+          if (!isExpired) ...[
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              label: 'Check verification status',
+              icon: Icons.check_circle_outline_rounded,
+              tone: AppButtonTone.secondary,
+              isLoading: _isPolling,
+              onPressed: () => _pollStatus(manual: true),
+            ),
+          ],
           if (isExpired) ...[
             const SizedBox(height: AppSpacing.md),
             AppButton(

@@ -38,7 +38,7 @@ class OnboardingScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            const GuardianLogo(size: 54),
+            const Center(child: GuardianLogo(size: 88)),
             const SizedBox(height: AppSpacing.xl),
             Text(
               "We've got your back,\nBamenda.",

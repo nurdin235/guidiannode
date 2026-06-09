@@ -6,7 +6,6 @@ import '../../../core/services/app_preferences.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
-import '../../../core/widgets/guardian_components.dart';
 import '../../emergency/screens/dashboard_screen.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
@@ -81,86 +80,143 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+    final logoSize = (screenHeight * 0.15).clamp(110.0, 130.0);
+    final spacing = (screenHeight * 0.03).clamp(12.0, 24.0);
+
     return Scaffold(
-      backgroundColor: AppColors.trustBlue,
-      body: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 190,
-            child: CustomPaint(painter: _BamendaSilhouettePainter()),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: AppColors.emergencyGradient,
           ),
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xl,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Spacer(),
-                      const GuardianLogo(
-                        size: 118,
-                        showWordmark: true,
-                        onDark: true,
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      Text(
-                        'Help is one tap away.\nStronger together,\nsafer Bamenda.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.cleanWhite,
-                          fontWeight: FontWeight.w800,
-                          height: 1.26,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      Container(
-                        width: 128,
-                        height: 3,
-                        decoration: const BoxDecoration(
-                          borderRadius: BorderRadius.all(Radius.circular(99)),
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.trustBlueDark,
-                              AppColors.safetyGreen,
-                              AppColors.engagementOrange,
-                              AppColors.communityYellow,
-                            ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: (screenHeight * 0.2).clamp(100.0, 140.0),
+              child: CustomPaint(painter: _BamendaSilhouettePainter()),
+            ),
+            SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: IntrinsicHeight(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xl,
+                              ),
+                              child: Column(
+                                children: [
+                                  const Spacer(flex: 3),
+                                  Container(
+                                    width: logoSize,
+                                    height: logoSize,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(logoSize * 0.22),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.08),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    padding: EdgeInsets.all(logoSize * 0.15),
+                                    child: Image.asset(
+                                      'assets/images/guardian_node_logo.png',
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (context, error, stackTrace) => Icon(
+                                        Icons.shield_rounded,
+                                        color: AppColors.trustBlue,
+                                        size: logoSize * 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: spacing),
+                                  Text(
+                                    'GuardianNode',
+                                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.5,
+                                      fontSize: (screenHeight * 0.034).clamp(24.0, 30.0),
+                                    ),
+                                  ),
+                                  SizedBox(height: spacing * 0.6),
+                                  Text(
+                                    'Help is one tap away.\nStronger together,\nsafer Bamenda.',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.35,
+                                      fontSize: (screenHeight * 0.022).clamp(18.0, 21.0),
+                                    ),
+                                  ),
+                                  SizedBox(height: spacing),
+                                  Container(
+                                    width: 80,
+                                    height: 3,
+                                    decoration: const BoxDecoration(
+                                      borderRadius: BorderRadius.all(Radius.circular(99)),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.trustBlueDark,
+                                          AppColors.safetyGreen,
+                                          AppColors.engagementOrange,
+                                          AppColors.communityYellow,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: spacing * 1.2),
+                                  const SizedBox(
+                                    width: 28,
+                                    height: 28,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.5,
+                                    ),
+                                  ),
+                                  const Spacer(flex: 4),
+                                  Text(
+                                    "Bamenda, We've Got You.",
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Colors.white.withValues(alpha: 0.85),
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.lg),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      const Spacer(),
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: AppColors.cleanWhite,
-                          strokeWidth: 2.2,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        "Bamenda, We've Got You.",
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.cleanWhite.withValues(alpha: 0.78),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xxl),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -169,15 +225,16 @@ class _SplashScreenState extends State<SplashScreen>
 class _BamendaSilhouettePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
+    // Reduced opacities to make the silhouette a subtle, faint background watermark
     final mountainPaint = Paint()
-      ..color = AppColors.cleanWhite.withValues(alpha: 0.12)
+      ..color = AppColors.cleanWhite.withValues(alpha: 0.05)
       ..style = PaintingStyle.fill;
     final townPaint = Paint()
-      ..color = AppColors.cleanWhite.withValues(alpha: 0.18)
+      ..color = AppColors.cleanWhite.withValues(alpha: 0.07)
       ..style = PaintingStyle.fill;
     final monumentPaint = Paint()
-      ..color = AppColors.cleanWhite.withValues(alpha: 0.28)
-      ..strokeWidth = 2
+      ..color = AppColors.cleanWhite.withValues(alpha: 0.12)
+      ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
     final mountains = Path()

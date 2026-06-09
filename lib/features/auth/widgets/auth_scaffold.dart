@@ -14,8 +14,8 @@ class AuthScaffold extends StatelessWidget {
     this.eyebrow,
     this.footer,
     this.showBackButton = true,
-    this.heroIcon = Icons.shield_outlined,
     this.badge,
+    this.logoSize = 96,
   });
 
   final String title;
@@ -24,8 +24,8 @@ class AuthScaffold extends StatelessWidget {
   final String? eyebrow;
   final Widget? footer;
   final bool showBackButton;
-  final IconData heroIcon;
   final Widget? badge;
+  final double logoSize;
 
   @override
   Widget build(BuildContext context) {
@@ -65,11 +65,7 @@ class AuthScaffold extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Center(
-                      child: GuardianLogo(
-                        size: heroIcon == Icons.pin_outlined ? 58 : 68,
-                      ),
-                    ),
+                    Center(child: GuardianLogo(size: logoSize)),
                     const SizedBox(height: AppSpacing.lg),
                     if (eyebrow != null)
                       Text(

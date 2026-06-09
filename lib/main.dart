@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'core/services/app_preferences.dart';
 import 'core/services/session_service.dart';
@@ -9,6 +10,7 @@ import 'features/emergency/services/supabase_realtime_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
   await AppPreferences.ensureInitialized();
   await SessionService.ensureInitialized();
   await SupabaseRealtimeService.instance.initialize();

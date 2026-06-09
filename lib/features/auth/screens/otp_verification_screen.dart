@@ -220,7 +220,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         _debugHelperMessage!.isNotEmpty;
 
     return AuthScaffold(
-      heroIcon: Icons.pin_outlined,
       title: 'Enter the $_otpLength-digit code',
       subtitle: 'We sent a code to ${widget.phoneNumber}.',
       child: Column(

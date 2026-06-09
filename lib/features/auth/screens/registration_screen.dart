@@ -48,7 +48,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isOpeningWhatsapp = false;
   bool _isPollingVerification = false;
   PositionSnapshot? _locationSnapshot;
+  
   Timer? _verificationPollTimer;
+  Timer? _countdownTimer;
+  Timer? _lastCheckedTimer;
+  DateTime _lastCheckedTime = DateTime.now();
+  int _secondsElapsedSinceStart = 0;
+  bool _whatsappOpened = false;
+  Duration _timeLeft = const Duration(minutes: 10);
+  DateTime? _expiryTime;
+  
   _WhatsappVerification? _whatsappVerification;
   String? _verificationMessage;
 
@@ -80,7 +89,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   void dispose() {
-    _verificationPollTimer?.cancel();
+    _cancelVerificationTimers();
     _termsRecognizer.dispose();
     _privacyRecognizer.dispose();
     _nameController.dispose();
@@ -190,14 +199,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         return;
       }
 
-      setState(
-        () {
-          _whatsappVerification = verification;
-          _verificationMessage =
-              'Waiting for your WhatsApp verification message.';
-        },
-      );
-      _startVerificationPolling();
+      setState(() {
+        _whatsappVerification = verification;
+        _whatsappOpened = false;
+        _verificationMessage =
+            'Waiting for your WhatsApp verification message.';
+      });
+      _startVerificationTimers();
     } catch (error) {
       if (!mounted) {
         return;
@@ -212,19 +220,77 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
   }
 
-  void _startVerificationPolling() {
-    _verificationPollTimer?.cancel();
-    _pollVerificationStatus();
+  void _startVerificationTimers() {
+    _cancelVerificationTimers();
+    _secondsElapsedSinceStart = 0;
+    _lastCheckedTime = DateTime.now();
+
+    final verification = _whatsappVerification;
+    if (verification != null) {
+      try {
+        _expiryTime = DateTime.parse(verification.expiresAt).toLocal();
+        _timeLeft = _expiryTime!.difference(DateTime.now());
+      } catch (e) {
+        _expiryTime = DateTime.now().add(const Duration(minutes: 10));
+        _timeLeft = const Duration(minutes: 10);
+      }
+    }
+
     _verificationPollTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _pollVerificationStatus(),
     );
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _secondsElapsedSinceStart++;
+        if (_expiryTime != null) {
+          _timeLeft = _expiryTime!.difference(DateTime.now());
+          if (_timeLeft.isNegative) {
+            _timeLeft = Duration.zero;
+            if (_whatsappVerification != null) {
+              _whatsappVerification = _whatsappVerification!.copyWith(status: 'expired');
+            }
+            _cancelVerificationTimers();
+            _verificationMessage =
+                'Your verification link has expired. Please request a new one.';
+          }
+        }
+      });
+    });
+
+    _lastCheckedTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
-  Future<void> _pollVerificationStatus() async {
+  void _cancelVerificationTimers() {
+    _verificationPollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _lastCheckedTimer?.cancel();
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  String _formatLastChecked() {
+    final difference = DateTime.now().difference(_lastCheckedTime).inSeconds;
+    if (difference < 4) {
+      return 'just now';
+    }
+    return '$difference seconds ago';
+  }
+
+  Future<void> _pollVerificationStatus({bool manual = false}) async {
     final verification = _whatsappVerification;
 
-    if (verification == null || _isPollingVerification) {
+    if (verification == null || (_isPollingVerification || (verification.status == 'expired' && !manual))) {
       return;
     }
 
@@ -239,6 +305,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         return;
       }
 
+      setState(() {
+        _lastCheckedTime = DateTime.now();
+      });
+
       if (response['success'] != true) {
         setState(() {
           _verificationMessage =
@@ -252,13 +322,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final verified = response['verified'] == true || status == 'verified';
 
       if (verified) {
-        _verificationPollTimer?.cancel();
+        _cancelVerificationTimers();
         final sessionPayload = response['session'];
 
         if (sessionPayload is Map) {
-          SessionService.setSession(
-            Map<String, dynamic>.from(sessionPayload),
-          );
+          SessionService.setSession(Map<String, dynamic>.from(sessionPayload));
           PostAuthFlow.routeAfterVerification(
             context,
             bootstrapLocationSharing: _enableLocationSharing,
@@ -274,7 +342,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       }
 
       if (status == 'expired') {
-        _verificationPollTimer?.cancel();
+        _cancelVerificationTimers();
         setState(() {
           _whatsappVerification = verification.copyWith(status: 'expired');
           _verificationMessage =
@@ -288,8 +356,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         _verificationMessage =
             'Waiting for your WhatsApp verification message.';
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _verificationMessage = 'Connection error. Retrying...';
+        });
+      }
     } finally {
-      _isPollingVerification = false;
+      if (mounted) {
+        _isPollingVerification = false;
+      }
     }
   }
 
@@ -300,7 +376,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    setState(() => _isOpeningWhatsapp = true);
+    setState(() {
+      _isOpeningWhatsapp = true;
+      _whatsappOpened = true;
+    });
 
     try {
       final uri = Uri.parse(verification.whatsappUrl);
@@ -334,7 +413,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   void _editRegistrationDetails() {
-    _verificationPollTimer?.cancel();
+    _cancelVerificationTimers();
     setState(() {
       _whatsappVerification = null;
       _verificationMessage = null;
@@ -346,6 +425,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _WhatsappVerification verification,
   ) {
     final isExpired = verification.status == 'expired';
+    final showWarning = !isExpired && _secondsElapsedSinceStart > 30;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,24 +494,60 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
         const SizedBox(height: AppSpacing.md),
         InfoBanner(
-          title: 'Link expiry',
-          message: 'This verification link expires in 10 minutes.',
+          title: isExpired ? 'Expired' : 'Expires in: ${_formatDuration(_timeLeft)}',
+          message: 'This verification link is active for 10 minutes.',
         ),
         if (_verificationMessage != null) ...[
           const SizedBox(height: AppSpacing.md),
           StatusBanner(
             title: isExpired ? 'Expired' : 'Waiting for WhatsApp',
-            message: _verificationMessage!,
-            tone: isExpired ? StatusTone.warning : StatusTone.info,
+            message: showWarning
+                ? 'Still waiting. Make sure the message was sent to the GuardianNode business number (+237 6 57 26 20 38).'
+                : _verificationMessage!,
+            tone: isExpired ? StatusTone.warning : (showWarning ? StatusTone.warning : StatusTone.info),
           ),
         ],
+        const SizedBox(height: AppSpacing.sm),
+        if (!isExpired)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Last checked: ${_formatLastChecked()}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textTertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Checking every 3 seconds',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textTertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: AppSpacing.xl),
         PrimaryButton(
-          text: 'Verify via WhatsApp',
+          text: _whatsappOpened ? 'Open WhatsApp again' : 'Verify via WhatsApp',
           icon: Icons.chat_rounded,
           isLoading: _isOpeningWhatsapp,
           onPressed: isExpired ? null : _openWhatsappVerification,
         ),
+        if (!isExpired) ...[
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            label: 'Check verification status',
+            icon: Icons.check_circle_outline_rounded,
+            tone: AppButtonTone.secondary,
+            isLoading: _isPollingVerification,
+            onPressed: () => _pollVerificationStatus(manual: true),
+          ),
+        ],
         const SizedBox(height: AppSpacing.md),
         if (isExpired) ...[
           OutlineActionButton(
@@ -458,7 +574,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final isExpired = whatsappVerification.status == 'expired';
 
       return AuthScaffold(
-        heroIcon: Icons.chat_bubble_outline_rounded,
         eyebrow: 'WhatsApp verification',
         title: 'Verify with WhatsApp',
         subtitle:
@@ -472,7 +587,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
 
     return AuthScaffold(
-      heroIcon: Icons.person_add_alt_1_rounded,
       eyebrow: 'Create your emergency profile',
       title: 'Join GuardianNode',
       subtitle:

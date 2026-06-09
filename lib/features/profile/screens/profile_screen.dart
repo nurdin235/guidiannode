@@ -160,12 +160,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading && _profile == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: _buildAppBar(),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_loadError != null && _profile == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Profile')),
+        appBar: _buildAppBar(),
         body: ErrorState(
           title: 'Profile unavailable',
           message: _loadError!,
@@ -178,27 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh profile',
-            onPressed: _isLoading
-                ? null
-                : () => _loadProfile(showSpinner: false),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-              );
-            },
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(showActions: true),
       body: SafeArea(
         child: ListView(
           padding: AppSpacing.screenPadding,
@@ -349,6 +332,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar({bool showActions = false}) {
+    return AppBar(
+      titleSpacing: 0,
+      title: const Row(
+        children: [
+          GuardianLogo(size: 38, padding: EdgeInsets.all(3)),
+          SizedBox(width: AppSpacing.sm),
+          Text('My Profile'),
+        ],
+      ),
+      actions: showActions
+          ? [
+              IconButton(
+                tooltip: 'Refresh profile',
+                onPressed: _isLoading
+                    ? null
+                    : () => _loadProfile(showSpinner: false),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+              IconButton(
+                tooltip: 'Settings',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ]
+          : null,
     );
   }
 }

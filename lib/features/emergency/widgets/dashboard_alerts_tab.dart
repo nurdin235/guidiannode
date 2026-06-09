@@ -50,11 +50,7 @@ class _DashboardAlertsTabState extends State<DashboardAlertsTab> {
             children: [
               GuardianAppBar(
                 title: 'Community Alerts',
-                leading: IconButton(
-                  tooltip: 'Menu',
-                  onPressed: () {},
-                  icon: const Icon(Icons.menu_rounded),
-                ),
+                showLogo: true,
                 actions: [
                   IconButton(
                     tooltip: 'Filter',

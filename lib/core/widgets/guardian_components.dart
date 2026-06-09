@@ -10,42 +10,85 @@ class GuardianLogo extends StatelessWidget {
   const GuardianLogo({
     super.key,
     this.size = 72,
+    this.width,
+    this.height,
     this.showWordmark = false,
     this.onDark = false,
+    this.padding,
+    this.semanticLabel = 'Guardian Node logo',
+    this.transparent = false,
+    this.glassmorphic = false,
+    this.backgroundColor,
+    this.borderRadius,
   });
 
+  static const assetPath = 'assets/images/guardian_node_logo.png';
+
   final double size;
+  final double? width;
+  final double? height;
   final bool showWordmark;
   final bool onDark;
+  final EdgeInsetsGeometry? padding;
+  final String semanticLabel;
+  final bool transparent;
+  final bool glassmorphic;
+  final Color? backgroundColor;
+  final double? borderRadius;
 
   @override
   Widget build(BuildContext context) {
-    final markColor = onDark ? AppColors.cleanWhite : AppColors.trustBlue;
     final textColor = onDark ? AppColors.cleanWhite : AppColors.trustBlue;
+    final resolvedWidth = width ?? size;
+    final resolvedHeight = height ?? size;
+    
+    // Increased padding to make the icon fit cleaner and look more professional
+    final resolvedPadding = padding ?? EdgeInsets.all(size * 0.12);
 
-    final mark = SizedBox.square(
-      dimension: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.shield_rounded, color: markColor, size: size),
-          Icon(
-            Icons.location_on_rounded,
-            color: onDark ? AppColors.trustBlue : AppColors.cleanWhite,
-            size: size * 0.48,
+    Color bg;
+    if (transparent) {
+      bg = Colors.transparent;
+    } else if (backgroundColor != null) {
+      bg = backgroundColor!;
+    } else if (glassmorphic) {
+      bg = AppColors.cleanWhite.withValues(alpha: 0.15);
+    } else {
+      bg = AppColors.cleanWhite;
+    }
+
+    final borderRad = borderRadius ?? (size * 0.22);
+
+    final mark = Semantics(
+      image: true,
+      label: semanticLabel,
+      child: Container(
+        width: resolvedWidth,
+        height: resolvedHeight,
+        padding: resolvedPadding,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(borderRad),
+          border: glassmorphic
+              ? Border.all(
+                  color: AppColors.cleanWhite.withValues(alpha: 0.25),
+                  width: 1.5,
+                )
+              : null,
+          boxShadow: onDark && !transparent && !glassmorphic
+              ? AppElevation.soft
+              : null,
+        ),
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          excludeFromSemantics: true,
+          errorBuilder: (context, error, stackTrace) => Icon(
+            Icons.shield_rounded,
+            color: onDark ? AppColors.cleanWhite : AppColors.trustBlue,
+            size: size * 0.72,
           ),
-          Positioned(
-            top: size * 0.31,
-            child: Container(
-              width: size * 0.16,
-              height: size * 0.16,
-              decoration: BoxDecoration(
-                color: markColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
 
@@ -64,7 +107,7 @@ class GuardianLogo extends StatelessWidget {
           style: Theme.of(context).textTheme.displayMedium?.copyWith(
             color: textColor,
             fontWeight: FontWeight.w900,
-            letterSpacing: 0,
+            letterSpacing: -0.8,
           ),
         ),
       ],
@@ -79,12 +122,14 @@ class GuardianAppBar extends StatelessWidget {
     this.subtitle,
     this.leading,
     this.actions = const [],
+    this.showLogo = false,
   });
 
   final String title;
   final String? subtitle;
   final Widget? leading;
   final List<Widget> actions;
+  final bool showLogo;
 
   @override
   Widget build(BuildContext context) {
@@ -98,11 +143,16 @@ class GuardianAppBar extends StatelessWidget {
       child: Row(
         children: [
           leading ??
-              IconButton(
-                tooltip: 'Back',
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-              ),
+              (showLogo
+                  ? const GuardianLogo(size: 40, padding: EdgeInsets.all(3))
+                  : IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                      ),
+                    )),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Column(

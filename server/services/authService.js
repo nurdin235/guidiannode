@@ -19,6 +19,7 @@ const buildOtpStartResponse = (otpSession, message) => ({
 });
 
 const startLoginOtp = async ({ phone_number }) => {
+  const startTime = Date.now();
   const existingUser = await userService.getUserByPhoneNumber(phone_number);
 
   if (!existingUser) {
@@ -29,6 +30,9 @@ const startLoginOtp = async ({ phone_number }) => {
     phone_number,
     existingUser.id
   );
+  
+  const duration = Date.now() - startTime;
+  console.log(`[auth] startLoginOtp for ${phone_number} completed in ${duration}ms`);
 
   return {
     ...buildWhatsappVerificationStartResponse(verification),
@@ -68,9 +72,13 @@ const buildWhatsappVerificationStartResponse = ({
 });
 
 const startRegistrationWhatsappVerification = async (registrationData) => {
+  const startTime = Date.now();
   const verification = await whatsappVerificationService.createRegistrationVerification(
     registrationData
   );
+
+  const duration = Date.now() - startTime;
+  console.log(`[REGISTER_START] completed in ${duration}ms`);
 
   return buildWhatsappVerificationStartResponse(verification);
 };
@@ -165,16 +173,20 @@ const getVerificationStatus = async ({ verificationId }) => {
   if (status === 'pending') {
     return {
       success: true,
+      verificationId: otpSession.id,
       status: 'pending',
       verified: false,
+      expiresAt: otpSession.expires_at,
     };
   }
 
   if (status === 'expired') {
     return {
       success: true,
+      verificationId: otpSession.id,
       status: 'expired',
       verified: false,
+      expiresAt: otpSession.expires_at,
       message: 'Your verification link has expired. Please request a new one.',
     };
   }
@@ -182,39 +194,40 @@ const getVerificationStatus = async ({ verificationId }) => {
   if (status !== 'verified') {
     return {
       success: true,
+      verificationId: otpSession.id,
       status,
       verified: false,
+      expiresAt: otpSession.expires_at,
     };
   }
 
   const otpPurpose = normalizeOtpPurpose(otpSession.purpose);
+  let response;
 
   if (otpPurpose === OTP_PURPOSE.REGISTER) {
-    const response = await finalizeRegistration(otpSession);
-
+    response = await finalizeRegistration(otpSession);
+  } else if (otpPurpose === OTP_PURPOSE.LOGIN) {
+    response = await finalizeLogin(otpSession);
+  } else {
     return {
-      ...response,
-      message: 'WhatsApp verification complete. Registration completed successfully.',
+      success: true,
+      verificationId: otpSession.id,
       status: 'verified',
       verified: true,
-    };
-  }
-
-  if (otpPurpose === OTP_PURPOSE.LOGIN) {
-    const response = await finalizeLogin(otpSession);
-
-    return {
-      ...response,
-      message: 'WhatsApp verification complete. Login successful.',
-      status: 'verified',
-      verified: true,
+      expiresAt: otpSession.expires_at,
     };
   }
 
   return {
     success: true,
+    verificationId: otpSession.id,
     status: 'verified',
     verified: true,
+    expiresAt: otpSession.expires_at,
+    user: response.user,
+    session: response.session,
+    authToken: response.session?.access_token,
+    message: response.message || 'WhatsApp verification complete.',
   };
 };
 

@@ -134,6 +134,20 @@ flutter build appbundle --release --dart-define-from-file=config/flutter.product
 
 Keep the keystore, passwords, and `key.properties` outside source control. The expected bundle is `build/app/outputs/bundle/release/app-release.aab`.
 
+Use separate Google Maps keys for Android debug and release builds. Restrict
+both keys to Maps SDK for Android and the package `com.guardiannode.app`.
+Configure `android/local.properties` with:
+
+```properties
+GOOGLE_MAPS_API_KEY=your_upload_certificate_restricted_key
+GOOGLE_MAPS_DEBUG_API_KEY=your_debug_certificate_restricted_key
+```
+
+After enabling Play App Signing, add the Play Console app-signing certificate
+SHA-1 to the release key's Android application restrictions. The upload
+certificate SHA-1 alone covers locally signed release builds and Play uploads,
+but not APKs re-signed and distributed by Google Play.
+
 ## Credential Safety
 
 Never commit `.env`, access tokens, service-role keys, app secrets, or keystores. If a credential has ever been committed or pasted into a shared channel, rotate it before deployment and remove it from Git history where appropriate.

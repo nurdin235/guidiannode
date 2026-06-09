@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('node:path');
 
 const router = express.Router();
 const DEFAULT_WHATSAPP_NUMBER = '237657262038';
@@ -37,10 +38,21 @@ const renderPage = ({ title, summary, content }) => `<!doctype html>
     }
     .header-inner { padding: 40px 0 34px; }
     .brand {
-      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 12px;
       font-size: 1rem;
       font-weight: 700;
       letter-spacing: 0;
+    }
+    .brand-logo {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      padding: 4px;
+      border-radius: 10px;
+      background: #fff;
     }
     h1 { margin: 0; font-size: clamp(2rem, 6vw, 3.25rem); line-height: 1.12; }
     .summary { max-width: 720px; margin: 16px 0 0; color: #e6eefb; font-size: 1.05rem; }
@@ -76,7 +88,10 @@ const renderPage = ({ title, summary, content }) => `<!doctype html>
 <body>
   <header>
     <div class="header-inner">
-      <p class="brand">Guardian Node</p>
+      <p class="brand">
+        <img class="brand-logo" src="/guardian-node-logo.png" alt="Guardian Node logo">
+        <span>Guardian Node</span>
+      </p>
       <h1>${title}</h1>
       <p class="summary">${summary}</p>
     </div>
@@ -88,6 +103,7 @@ const renderPage = ({ title, summary, content }) => `<!doctype html>
   <footer>
     <nav aria-label="Legal pages">
       <a href="/privacy-policy">Privacy Policy</a>
+      <a href="/terms-of-service">Terms of Service</a>
       <a href="/data-deletion">Data Deletion Instructions</a>
       <a href="${CONTACT_WHATSAPP_URL}">Contact Support on WhatsApp</a>
     </nav>
@@ -230,19 +246,82 @@ const dataDeletionPage = renderPage({
   `,
 });
 
+const termsOfServicePage = renderPage({
+  title: 'Terms of Service',
+  summary:
+    'These terms explain the rules for using Guardian Node accounts, safety alerts, location features, and WhatsApp verification.',
+  content: `
+    <section class="notice">
+      <h2>Use Guardian Node responsibly</h2>
+      <p>Guardian Node supports community safety communication. It does not replace police, medical, fire, or other official emergency services.</p>
+    </section>
+
+    <section>
+      <h2>1. Acceptance of these terms</h2>
+      <p>By creating an account or using Guardian Node, you agree to these Terms of Service and the <a href="/privacy-policy">Privacy Policy</a>. If you do not agree, do not use the application.</p>
+    </section>
+
+    <section>
+      <h2>2. Accounts and verification</h2>
+      <p>You must provide accurate account information and maintain control of the phone number used for WhatsApp verification. You are responsible for activity performed through your account and for keeping your device secure.</p>
+    </section>
+
+    <section>
+      <h2>3. Emergency and community features</h2>
+      <p>Use SOS and community alert features only for genuine safety needs. Do not submit false, misleading, abusive, or unlawful reports. Network, device, location, and third-party service availability can affect delivery and response times.</p>
+    </section>
+
+    <section>
+      <h2>4. Location information</h2>
+      <p>Location features are used to support nearby alerts, SOS routing, and responder guidance when enabled. You are responsible for checking device permissions and the accuracy available from your device.</p>
+    </section>
+
+    <section>
+      <h2>5. Prohibited conduct</h2>
+      <ul>
+        <li>Do not impersonate another person or attempt to access another account.</li>
+        <li>Do not interfere with the service, webhook, verification, or safety-alert systems.</li>
+        <li>Do not use Guardian Node to threaten, harass, defraud, or intentionally endanger others.</li>
+        <li>Do not submit automated, malicious, or excessive requests.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>6. Suspension and termination</h2>
+      <p>Guardian Node may restrict or suspend access when reasonably necessary to protect users, investigate misuse, comply with law, or maintain service security. You may request account and eligible data deletion through the <a href="/data-deletion">Data Deletion Instructions</a>.</p>
+    </section>
+
+    <section>
+      <h2>7. Service availability and liability</h2>
+      <p>The service is provided on an availability basis. Guardian Node cannot guarantee uninterrupted operation, accurate device location, message delivery, or responder arrival. Nothing in these terms excludes rights or liability that cannot legally be excluded.</p>
+    </section>
+
+    <section>
+      <h2>8. Changes and contact</h2>
+      <p>These terms may be updated as the service changes. Continued use after an update means the revised terms apply. Questions may be sent through <a href="${CONTACT_WHATSAPP_URL}">Guardian Node support on WhatsApp</a>.</p>
+    </section>
+  `,
+});
+
 const sendHtml = (html) => (req, res) => {
   res
     .status(200)
     .set({
       'Cache-Control': 'public, max-age=3600',
       'Content-Security-Policy':
-        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     })
     .type('html')
     .send(html);
 };
 
 router.get('/privacy-policy', sendHtml(privacyPolicyPage));
+router.get('/terms-of-service', sendHtml(termsOfServicePage));
 router.get('/data-deletion', sendHtml(dataDeletionPage));
+router.get('/guardian-node-logo.png', (req, res) => {
+  res
+    .set('Cache-Control', 'public, max-age=86400')
+    .sendFile(path.join(__dirname, '..', 'public', 'guardian-node-logo.png'));
+});
 
 module.exports = router;

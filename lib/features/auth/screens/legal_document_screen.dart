@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
+import '../../../core/widgets/guardian_components.dart';
 import '../../../core/widgets/status_widgets.dart';
 
 class LegalDocumentScreen extends StatelessWidget {
@@ -22,7 +23,16 @@ class LegalDocumentScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            const GuardianLogo(size: 38, padding: EdgeInsets.all(3)),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: Text(title)),
+          ],
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: AppSpacing.screenPadding,

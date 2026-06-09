@@ -65,6 +65,7 @@ coverage/
 **/coverage/
 android/local.properties
 android/key.properties
+config/flutter.production.json
 *.jks
 *.keystore
 ios/Flutter/Secrets.xcconfig

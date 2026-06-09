@@ -114,7 +114,6 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   Widget build(BuildContext context) {
     return AuthScaffold(
       showBackButton: false,
-      heroIcon: Icons.person_add_alt_1_rounded,
       eyebrow: 'Final setup',
       title: 'Complete your emergency profile',
       subtitle:

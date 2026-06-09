@@ -3,4 +3,4 @@
 storePassword=replace_with_private_store_password
 keyPassword=replace_with_private_key_password
 keyAlias=upload
-storeFile=app/upload-keystore.jks
+storeFile=upload-keystore.jks

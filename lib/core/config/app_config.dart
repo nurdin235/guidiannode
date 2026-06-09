@@ -7,10 +7,7 @@ class AppConfig {
       '$_androidEmulatorApiBaseUrl/api/auth';
   static const String _apiBaseUrlOverride = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: String.fromEnvironment(
-      'VITE_API_BASE_URL',
-      defaultValue: '',
-    ),
+    defaultValue: String.fromEnvironment('VITE_API_BASE_URL', defaultValue: ''),
   );
   static const String _apiAuthBaseUrlOverride = String.fromEnvironment(
     'API_AUTH_BASE_URL',
@@ -65,6 +62,8 @@ class AppConfig {
 
     return '$apiBaseUrl/api/auth';
   }
+
+  static Uri get dataDeletionUri => Uri.parse('$apiBaseUrl/data-deletion');
 
   static String get apiAuthBaseUrlHint {
     if (_apiAuthBaseUrlOverride.isNotEmpty || _apiBaseUrlOverride.isNotEmpty) {

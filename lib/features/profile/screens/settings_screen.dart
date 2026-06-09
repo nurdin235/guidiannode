@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/services/app_preferences.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/theme/colors.dart';
@@ -71,6 +73,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _openDataDeletion() async {
+    final opened = await launchUrl(
+      AppConfig.dataDeletionUri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!mounted || opened) {
+      return;
+    }
+
+    StatusSnackbar.show(
+      context,
+      message: 'The account deletion page could not be opened.',
+      tone: StatusTone.error,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -78,7 +97,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context, _) {
         return Scaffold(
           backgroundColor: AppColors.cleanWhite,
-          appBar: AppBar(title: const Text('Settings')),
+          appBar: AppBar(
+            titleSpacing: 0,
+            title: const Row(
+              children: [
+                GuardianLogo(size: 38, padding: EdgeInsets.all(3)),
+                SizedBox(width: AppSpacing.sm),
+                Text('Settings'),
+              ],
+            ),
+          ),
           body: ListView(
             padding: AppSpacing.screenPadding,
             children: [
@@ -135,6 +163,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   );
                 },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SettingsTile(
+                icon: Icons.delete_forever_outlined,
+                title: 'Delete account & data',
+                subtitle:
+                    'Open the secure deletion request page and verify ownership.',
+                onTap: _openDataDeletion,
               ),
               const SizedBox(height: AppSpacing.xl),
               const SectionHeader(title: 'Preferences'),

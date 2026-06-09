@@ -63,26 +63,38 @@ const extractIncomingMessages = (payload) => {
   return messages;
 };
 
-const processIncomingMessages = async (messages) => {
+const processIncomingMessages = async (messages, startTime) => {
   for (const message of messages) {
+    console.log(`[WEBHOOK] Sender: ${message.senderPhoneNumber}`);
+    console.log(`[WEBHOOK] Raw text body: ${message.body}`);
+    
     const token = whatsappVerificationService.extractVerificationToken(message.body);
 
     if (!token) {
-      console.warn(
-        `[webhook] WhatsApp message from ${maskPhoneNumber(message.senderPhoneNumber)} did not contain a GuardianNode verification token.`
-      );
+      console.log('[WEBHOOK] DB lookup: not_found');
+      console.log('[WEBHOOK] No valid token found');
       continue;
     }
 
+    console.log(`[WEBHOOK] Normalized token: ${token}`);
+
     try {
-      await whatsappVerificationService.verifyIncomingWhatsappToken({
+      const result = await whatsappVerificationService.verifyIncomingWhatsappToken({
         token,
         senderPhoneNumber: message.senderPhoneNumber,
       });
+
+      if (result && result.verified) {
+        console.log(`[WEBHOOK] Verification updated: verificationId=${result.verificationId}`);
+        if (result.userId && result.userId !== 'none') {
+          console.log(`[WEBHOOK] User activation updated: userId=${result.userId}`);
+        }
+      }
     } catch (error) {
       console.error('[webhook] WhatsApp verification processing failed:', error);
     }
   }
+  console.log(`[WEBHOOK] Completed in ${Date.now() - startTime}ms`);
 };
 
 const verifyWebhookHandler = (req, res) => {
@@ -102,6 +114,9 @@ const verifyWebhookHandler = (req, res) => {
 };
 
 const receiveWebhookHandler = (req, res) => {
+  const startTime = Date.now();
+  console.log('[WEBHOOK] Event received');
+  
   if (!verifyMetaWebhookSignature(req)) {
     return res.status(401).json({
       success: false,
@@ -111,15 +126,17 @@ const receiveWebhookHandler = (req, res) => {
   }
 
   const messages = extractIncomingMessages(req.body);
+  console.log(`[WEBHOOK] Message count: ${messages.length}`);
 
   res.status(200).json({ success: true });
 
   if (messages.length === 0) {
+    console.log(`[WEBHOOK] Completed in ${Date.now() - startTime}ms`);
     return;
   }
 
   setImmediate(() => {
-    processIncomingMessages(messages).catch((error) => {
+    processIncomingMessages(messages, startTime).catch((error) => {
       console.error('[webhook] WhatsApp webhook background processing failed:', error);
     });
   });

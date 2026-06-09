@@ -117,11 +117,7 @@ class DashboardMapTab extends StatelessWidget {
                               ),
                               child: GuardianAppBar(
                                 title: 'Live Map',
-                                leading: IconButton(
-                                  tooltip: 'Menu',
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.menu_rounded),
-                                ),
+                                showLogo: true,
                               ),
                             ),
                           ),

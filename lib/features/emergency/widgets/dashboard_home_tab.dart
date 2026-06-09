@@ -273,6 +273,12 @@ class _HomeHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  const GuardianLogo(
+                    size: 46,
+                    onDark: true,
+                    padding: EdgeInsets.all(3),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       'Good morning,\n$firstName',

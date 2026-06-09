@@ -52,11 +52,7 @@ class _DashboardCommunityTabState extends State<DashboardCommunityTab> {
           children: [
             GuardianAppBar(
               title: 'Emergency History',
-              leading: const SizedBox(
-                width: 48,
-                height: 48,
-                child: Icon(Icons.history_rounded, color: AppColors.trustBlue),
-              ),
+              showLogo: true,
               actions: [
                 IconButton(
                   tooltip: 'Profile',

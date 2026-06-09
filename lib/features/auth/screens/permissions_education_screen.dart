@@ -5,6 +5,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radii.dart';
 import '../../../core/theme/spacing.dart';
 import '../../../core/widgets/buttons.dart';
+import '../../../core/widgets/guardian_components.dart';
 import '../../../core/widgets/status_widgets.dart';
 import '../../emergency/services/emergency_coordinator.dart';
 import 'login_screen.dart';
@@ -76,19 +77,7 @@ class _PermissionsEducationScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: const BoxDecoration(
-                      color: AppColors.trustBlueSurface,
-                      borderRadius: AppRadii.card,
-                    ),
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: AppColors.trustBlueDark,
-                      size: 34,
-                    ),
-                  ),
+                  const Center(child: GuardianLogo(size: 88)),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
                     'Before you begin, allow location when you can',

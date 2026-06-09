@@ -99,6 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final verificationId = response['verificationId']?.toString();
       final token = response['token']?.toString();
       final whatsappUrl = response['whatsappUrl']?.toString();
+      final expiresAt = response['expiresAt']?.toString() ?? response['expires_at']?.toString();
 
       if (verificationId == null || token == null || whatsappUrl == null) {
         StatusSnackbar.show(
@@ -115,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
             verificationId: verificationId,
             token: token,
             whatsappUrl: whatsappUrl,
+            expiresAt: expiresAt,
             title: 'Verify your login',
             subtitle:
                 'Send the prepared message from WhatsApp to securely continue.',
@@ -147,7 +149,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return AuthScaffold(
       showBackButton: false,
-      heroIcon: Icons.shield_rounded,
       title: 'Welcome back!',
       subtitle: 'Login to continue',
       badge: AuthHeroBadge(

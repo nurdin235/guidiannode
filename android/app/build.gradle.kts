@@ -61,12 +61,17 @@ fun looksLikeLocalApiUrl(value: String): Boolean {
         .any { normalizedValue.contains(it) }
 }
 
-val googleMapsApiKey =
+val googleMapsReleaseApiKey =
     System.getenv("GOOGLE_MAPS_API_KEY")
         ?: System.getenv("VITE_GOOGLE_MAPS_API_KEY")
         ?: localProperties.getProperty("GOOGLE_MAPS_API_KEY")
         ?: localProperties.getProperty("VITE_GOOGLE_MAPS_API_KEY")
         ?: ""
+
+val googleMapsDebugApiKey =
+    System.getenv("GOOGLE_MAPS_DEBUG_API_KEY")
+        ?: localProperties.getProperty("GOOGLE_MAPS_DEBUG_API_KEY")
+        ?: googleMapsReleaseApiKey
 
 android {
     namespace = "com.guardiannode.app"
@@ -101,16 +106,18 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsReleaseApiKey
         manifestPlaceholders["usesCleartextTraffic"] = "false"
     }
 
     buildTypes {
         debug {
+            manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsDebugApiKey
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
 
         release {
+            manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsReleaseApiKey
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
@@ -149,7 +156,7 @@ afterEvaluate {
                 )
             }
 
-            if (googleMapsApiKey.isBlank()) {
+            if (googleMapsReleaseApiKey.isBlank()) {
                 throw GradleException(
                     "Release builds require GOOGLE_MAPS_API_KEY in local.properties or the environment."
                 )
