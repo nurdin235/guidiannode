@@ -9,7 +9,7 @@
     "start:prod": "node -e \"process.env.NODE_ENV='production'; require('./server')\"",
     "check:env": "node -e \"require('./config/startupChecks').assertProductionReady(); console.log('Environment is ready')\"",
     "check:env:prod": "node -e \"process.env.NODE_ENV='production'; require('./config/startupChecks').assertProductionReady(); console.log('Production environment is ready')\"",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [],
   "author": "",

@@ -78,9 +78,37 @@ const startRegistrationWhatsappVerification = async (registrationData) => {
   );
 
   const duration = Date.now() - startTime;
-  console.log(`[REGISTER_START] completed in ${duration}ms`);
+  console.log(`[REGISTER_START] completedMs=${duration}`);
 
   return buildWhatsappVerificationStartResponse(verification);
+};
+
+const buildSafeUserPayload = (user) => {
+  if (!user || typeof user !== 'object') {
+    return null;
+  }
+
+  const allowedFields = [
+    'id',
+    'full_name',
+    'phone_number',
+    'quarter',
+    'location_permission',
+    'latitude',
+    'longitude',
+    'phone_verified',
+    'phone_verified_at',
+    'emergency_contact',
+    'created_at',
+    'updated_at',
+  ];
+
+  return allowedFields.reduce((payload, field) => {
+    if (Object.prototype.hasOwnProperty.call(user, field)) {
+      payload[field] = user[field];
+    }
+    return payload;
+  }, {});
 };
 
 const buildAuthenticatedPayload = (user, emergencyContact, message) => {
@@ -224,7 +252,7 @@ const getVerificationStatus = async ({ verificationId }) => {
     status: 'verified',
     verified: true,
     expiresAt: otpSession.expires_at,
-    user: response.user,
+    user: buildSafeUserPayload(response.user),
     session: response.session,
     authToken: response.session?.access_token,
     message: response.message || 'WhatsApp verification complete.',

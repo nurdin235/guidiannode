@@ -45,6 +45,10 @@ const extractIncomingMessages = (payload) => {
       const incomingMessages = Array.isArray(value.messages) ? value.messages : [];
 
       for (const message of incomingMessages) {
+        if (message?.type !== 'text') {
+          continue;
+        }
+
         const body = message?.text?.body;
         const senderPhoneNumber = message?.from;
 
@@ -65,18 +69,17 @@ const extractIncomingMessages = (payload) => {
 
 const processIncomingMessages = async (messages, startTime) => {
   for (const message of messages) {
-    console.log(`[WEBHOOK] Sender: ${message.senderPhoneNumber}`);
-    console.log(`[WEBHOOK] Raw text body: ${message.body}`);
+    console.log(`[WEBHOOK] sender=${maskPhoneNumber(message.senderPhoneNumber)}`);
+    console.log(`[WEBHOOK] body=${message.body}`);
     
-    const token = whatsappVerificationService.extractVerificationToken(message.body);
+    const token = whatsappVerificationService.normalizeVerificationToken(message.body);
+    console.log(`[WEBHOOK] normalizedToken=${token ?? 'none'}`);
 
     if (!token) {
-      console.log('[WEBHOOK] DB lookup: not_found');
-      console.log('[WEBHOOK] No valid token found');
+      console.log('[WEBHOOK] lookup=not_found');
+      console.log('[WEBHOOK] verificationUpdated=false');
       continue;
     }
-
-    console.log(`[WEBHOOK] Normalized token: ${token}`);
 
     try {
       const result = await whatsappVerificationService.verifyIncomingWhatsappToken({
@@ -85,7 +88,6 @@ const processIncomingMessages = async (messages, startTime) => {
       });
 
       if (result && result.verified) {
-        console.log(`[WEBHOOK] Verification updated: verificationId=${result.verificationId}`);
         if (result.userId && result.userId !== 'none') {
           console.log(`[WEBHOOK] User activation updated: userId=${result.userId}`);
         }
@@ -94,7 +96,7 @@ const processIncomingMessages = async (messages, startTime) => {
       console.error('[webhook] WhatsApp verification processing failed:', error);
     }
   }
-  console.log(`[WEBHOOK] Completed in ${Date.now() - startTime}ms`);
+  console.log(`[WEBHOOK] completedMs=${Date.now() - startTime}`);
 };
 
 const verifyWebhookHandler = (req, res) => {
@@ -115,7 +117,7 @@ const verifyWebhookHandler = (req, res) => {
 
 const receiveWebhookHandler = (req, res) => {
   const startTime = Date.now();
-  console.log('[WEBHOOK] Event received');
+  console.log('[WEBHOOK] received');
   
   if (!verifyMetaWebhookSignature(req)) {
     return res.status(401).json({
@@ -126,12 +128,12 @@ const receiveWebhookHandler = (req, res) => {
   }
 
   const messages = extractIncomingMessages(req.body);
-  console.log(`[WEBHOOK] Message count: ${messages.length}`);
+  console.log(`[WEBHOOK] messageCount=${messages.length}`);
 
   res.status(200).json({ success: true });
 
   if (messages.length === 0) {
-    console.log(`[WEBHOOK] Completed in ${Date.now() - startTime}ms`);
+    console.log(`[WEBHOOK] completedMs=${Date.now() - startTime}`);
     return;
   }
 

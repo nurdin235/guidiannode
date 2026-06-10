@@ -10,6 +10,7 @@ process.env.WHATSAPP_BUSINESS_NUMBER ||= '237657262038';
 const {
   buildWhatsappUrl,
   extractVerificationToken,
+  normalizeVerificationToken,
 } = require('../services/whatsappVerificationService');
 const {
   extractIncomingMessages,
@@ -18,6 +19,7 @@ const {
 
 test('extractVerificationToken finds and normalizes GuardianNode WhatsApp tokens', () => {
   assert.equal(extractVerificationToken('please verify cm-a7k9q'), 'CM-A7K9Q');
+  assert.equal(normalizeVerificationToken('please verify cm-a7k9q'), 'CM-A7K9Q');
   assert.equal(extractVerificationToken('Token: CM-3F8XZ. Thank you'), 'CM-3F8XZ');
   assert.equal(extractVerificationToken('hello without token'), null);
   
@@ -47,10 +49,13 @@ test('extractIncomingMessages safely walks WhatsApp Cloud API payloads', () => {
               messages: [
                 {
                   from: '237657262038',
+                  type: 'text',
                   text: { body: 'CM-A7K9Q' },
                 },
                 {
                   from: '237657262038',
+                  type: 'image',
+                  image: { id: 'ignored' },
                 },
               ],
             },

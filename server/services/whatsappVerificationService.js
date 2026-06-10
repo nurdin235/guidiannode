@@ -14,7 +14,7 @@ const {
 
 const OTP_SESSIONS_TABLE = 'otp_sessions';
 const TOKEN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const TOKEN_REGEX = /\bCM-[A-Z0-9]{5}\b/i;
+const STRICT_TOKEN_REGEX = /\bCM-[A-Z0-9]{5}\b/i;
 const TOKEN_GENERATION_RETRIES = 12;
 const WHATSAPP_INBOUND_METHOD = 'whatsapp_inbound';
 const getWhatsappBusinessNumber = () => {
@@ -36,8 +36,38 @@ const getWhatsappBusinessNumber = () => {
   return digitsOnly;
 };
 
-const buildWhatsappUrl = (token) =>
-  `https://wa.me/${getWhatsappBusinessNumber()}?text=${encodeURIComponent(token)}`;
+const normalizeVerificationToken = (messageBody) => {
+  const body = String(messageBody ?? '');
+
+  const strictMatch = body.match(STRICT_TOKEN_REGEX);
+  if (strictMatch) {
+    return strictMatch[0].toUpperCase();
+  }
+
+  const cmMatch = /\bC\s*M\b/i.exec(body);
+  if (!cmMatch) {
+    return null;
+  }
+
+  const afterPrefix = body.slice(cmMatch.index + cmMatch[0].length);
+  const tokenBody = afterPrefix.replace(/^[\s-]+/, '');
+  const suffix = (tokenBody.match(/[A-Z0-9]/gi) ?? [])
+    .slice(0, 5)
+    .join('')
+    .toUpperCase();
+
+  return suffix.length === 5 ? `CM-${suffix}` : null;
+};
+
+const buildWhatsappUrl = (token) => {
+  const normalizedToken =
+    normalizeVerificationToken(token) ||
+    String(token ?? '')
+      .replace(/\s+/g, '')
+      .toUpperCase();
+
+  return `https://wa.me/${getWhatsappBusinessNumber()}?text=${encodeURIComponent(normalizedToken)}`;
+};
 
 const generateWhatsappVerificationToken = () => {
   const bytes = crypto.randomBytes(5);
@@ -46,33 +76,12 @@ const generateWhatsappVerificationToken = () => {
   return `CM-${suffix}`;
 };
 
-const extractVerificationToken = (messageBody) => {
-  const body = String(messageBody ?? '').trim();
-  
-  // 1. Try strict match first (case-insensitive word boundaries)
-  const strictMatch = body.match(/\bCM-[A-Z0-9]{5}\b/i);
-  if (strictMatch) {
-    return strictMatch[0].toUpperCase();
-  }
-
-  // 2. Try tolerant regex for spaced tokens (e.g. "CM-27 LEG", "CM 27 LEG", "CM 27LEG")
-  // C and M with optional spaces, optional separator (hyphen or space), followed by 5 alphanumeric characters (each optionally followed by spaces)
-  const tolerantMatch = body.match(/C\s*M\s*[- ]?\s*([A-Z0-9]\s*){5}/i);
-  if (tolerantMatch) {
-    const clean = tolerantMatch[0].replace(/\s+/g, '').toUpperCase();
-    if (clean.startsWith('CM-')) {
-      return clean;
-    } else if (clean.startsWith('CM')) {
-      return 'CM-' + clean.substring(2);
-    }
-  }
-
-  return null;
-};
+const extractVerificationToken = normalizeVerificationToken;
 
 const isWhatsappVerificationSession = (otpSession) =>
   otpSession?.verification_method === WHATSAPP_INBOUND_METHOD ||
-  otpSession?.metadata?.verification_method === WHATSAPP_INBOUND_METHOD;
+  otpSession?.metadata?.verification_method === WHATSAPP_INBOUND_METHOD ||
+  otpSession?.metadata?.mode === WHATSAPP_INBOUND_METHOD;
 
 const isMissingColumnError = (error, columnName) => {
   const haystack = [error?.message, error?.details, error?.hint]
@@ -298,40 +307,89 @@ const findSessionByToken = async (token) => {
   return data;
 };
 
-const verifyIncomingWhatsappToken = async ({ token, senderPhoneNumber }) => {
-  const normalizedToken = String(token ?? '').trim().toUpperCase();
+const updatePendingVerificationSession = async (verificationId, payload) => {
+  const optionalColumns = [
+    'whatsapp_sender_phone',
+    'normalized_whatsapp_sender_phone',
+    'verified_at',
+  ];
+  const activePayload = { ...payload };
 
-  if (!/^CM-[A-Z0-9]{5}$/.test(normalizedToken)) {
-    console.log('[WEBHOOK] DB lookup: not_found');
+  for (let attempt = 0; attempt <= optionalColumns.length; attempt += 1) {
+    const { data, error } = await supabaseAdmin
+      .from(OTP_SESSIONS_TABLE)
+      .update(activePayload)
+      .eq('id', verificationId)
+      .eq('status', 'pending')
+      .select()
+      .maybeSingle();
+
+    if (!error) {
+      return data;
+    }
+
+    const missingOptionalColumn = optionalColumns.find(
+      (columnName) =>
+        Object.prototype.hasOwnProperty.call(activePayload, columnName) &&
+        isMissingColumnError(error, columnName)
+    );
+
+    if (!missingOptionalColumn) {
+      throw wrapDatabaseError(error, OTP_SESSIONS_TABLE);
+    }
+
+    delete activePayload[missingOptionalColumn];
+    console.warn(
+      `[WEBHOOK] optionalColumnMissing=${missingOptionalColumn}; retrying core verification update`
+    );
+  }
+
+  throw new AppError(
+    'Verification session could not be updated.',
+    500,
+    'verification_update_failed'
+  );
+};
+
+const verifyIncomingWhatsappToken = async ({ token, senderPhoneNumber }) => {
+  const normalizedToken = normalizeVerificationToken(token);
+
+  if (!normalizedToken) {
+    console.log('[WEBHOOK] lookup=not_found');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'invalid_token_format' };
   }
 
   const otpSession = await findSessionByToken(normalizedToken);
 
   if (!otpSession) {
-    console.log('[WEBHOOK] DB lookup: not_found');
+    console.log('[WEBHOOK] lookup=not_found');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'token_not_found' };
   }
 
   if (!isWhatsappVerificationSession(otpSession)) {
-    console.log('[WEBHOOK] DB lookup: not_found');
+    console.log('[WEBHOOK] lookup=not_found');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'invalid_verification_method' };
   }
 
   if (otpSession.status === 'verified') {
-    console.log('[WEBHOOK] DB lookup: already_verified');
+    console.log('[WEBHOOK] lookup=already_verified');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'already_verified' };
   }
 
   if (otpSession.status === 'cancelled') {
-    console.log('[WEBHOOK] DB lookup: not_found');
+    console.log('[WEBHOOK] lookup=not_found');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'cancelled' };
   }
 
   // Check if expired
   const isExpired = new Date(otpSession.expires_at).getTime() <= Date.now();
   if (isExpired || otpSession.status === 'expired') {
-    console.log('[WEBHOOK] DB lookup: expired');
+    console.log('[WEBHOOK] lookup=expired');
     if (otpSession.status === 'pending') {
       try {
         await expireVerificationSession(otpSession);
@@ -339,10 +397,11 @@ const verifyIncomingWhatsappToken = async ({ token, senderPhoneNumber }) => {
         console.error('[webhook] Failed to mark expired status in DB:', err.message);
       }
     }
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'expired' };
   }
 
-  console.log('[WEBHOOK] DB lookup: found');
+  console.log('[WEBHOOK] lookup=found');
 
   const normalizedSenderPhone = normalizePhoneNumber(senderPhoneNumber);
   const senderMatchesSubmitted = comparePhoneNumbers({
@@ -376,55 +435,15 @@ const verifyIncomingWhatsappToken = async ({ token, senderPhoneNumber }) => {
     updated_at: nowIso(),
   };
 
-  let data, error;
-  try {
-    const res = await supabaseAdmin
-      .from(OTP_SESSIONS_TABLE)
-      .update(updatePayload)
-      .eq('id', otpSession.id)
-      .eq('status', 'pending')
-      .select()
-      .maybeSingle();
-    data = res.data;
-    error = res.error;
-  } catch (err) {
-    error = err;
-  }
-
-  if (error && (isMissingColumnError(error, 'whatsapp_sender_phone') || isMissingColumnError(error, 'normalized_whatsapp_sender_phone'))) {
-    const fallbackPayload = {
-      status: 'verified',
-      verified_at: nowIso(),
-      attempts: Math.max(otpSession.attempts ?? 0, 1),
-      metadata,
-      updated_at: nowIso(),
-    };
-
-    if (!isMissingColumnError(error, 'whatsapp_sender_phone')) {
-      fallbackPayload.whatsapp_sender_phone = normalizedSenderPhone;
-    }
-
-    const res = await supabaseAdmin
-      .from(OTP_SESSIONS_TABLE)
-      .update(fallbackPayload)
-      .eq('id', otpSession.id)
-      .eq('status', 'pending')
-      .select()
-      .maybeSingle();
-    data = res.data;
-    error = res.error;
-  }
-
-  if (error) {
-    throw wrapDatabaseError(error, OTP_SESSIONS_TABLE);
-  }
+  const data = await updatePendingVerificationSession(otpSession.id, updatePayload);
 
   if (!data) {
-    console.log('[WEBHOOK] DB lookup: already_verified');
+    console.log('[WEBHOOK] lookup=already_verified');
+    console.log('[WEBHOOK] verificationUpdated=false');
     return { verified: false, reason: 'already_processed' };
   }
 
-  console.log(`[WEBHOOK] Verification updated: verificationId=${data.id}`);
+  console.log(`[WEBHOOK] verificationUpdated=true verificationId=${data.id}`);
 
   // Update existing user phone verification if user exists
   let userId = 'none';
@@ -473,6 +492,7 @@ module.exports = {
   createRegistrationVerification,
   extractVerificationToken,
   getWhatsappBusinessNumber,
+  normalizeVerificationToken,
   resolveVerificationSessionStatus,
   verifyIncomingWhatsappToken,
 };

@@ -1,89 +1,246 @@
 const crypto = require('crypto');
-const http = require('http');
-const https = require('https');
 const path = require('path');
 
-// Load env configuration
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const token = process.argv[2] || 'CM-27 LEG';
-const baseUrl = process.argv[3] || 'http://localhost:3000';
-const senderPhone = process.argv[4] || '237657262038';
+const { normalizeVerificationToken } = require('../services/whatsappVerificationService');
 
-const payload = {
-  entry: [
-    {
-      changes: [
-        {
-          value: {
-            messages: [
-              {
-                from: senderPhone,
-                type: 'text',
-                text: {
-                  body: token
-                }
-              }
-            ]
-          }
-        }
-      ]
+const args = process.argv.slice(2);
+
+const readArg = (names, fallback = undefined) => {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const matchedName = names.find((name) => arg === name || arg.startsWith(`${name}=`));
+
+    if (!matchedName) {
+      continue;
     }
-  ]
+
+    if (arg.includes('=')) {
+      return arg.slice(arg.indexOf('=') + 1);
+    }
+
+    return args[index + 1] ?? fallback;
+  }
+
+  return fallback;
 };
 
-const payloadString = JSON.stringify(payload);
-const appSecret = String(process.env.WHATSAPP_APP_SECRET || '').trim();
+const hasFlag = (name) => args.includes(name);
 
-let signature = '';
-if (appSecret) {
-  signature = 'sha256=' + crypto
-    .createHmac('sha256', appSecret)
-    .update(payloadString)
-    .digest('hex');
-  console.log(`[test-webhook] Calculated HMAC Signature: ${signature}`);
-} else {
-  console.log('[test-webhook] WARNING: WHATSAPP_APP_SECRET not found in .env. Running without valid signature check.');
-}
+const normalizeBaseUrl = (value) => String(value || '').replace(/\/+$/, '');
 
-console.log(`[test-webhook] Target URL: ${baseUrl}/webhook`);
-console.log(`[test-webhook] Simulating payload token: "${token}"`);
-console.log(`[test-webhook] Sender phone: "${senderPhone}"`);
+const baseUrl = normalizeBaseUrl(
+  readArg(['--base-url', '--url'], process.env.API_BASE_URL || 'http://localhost:3000')
+);
+const senderPhone = readArg(['--sender', '--sender-phone'], '237657262038');
 
-const urlObj = new URL(`${baseUrl}/webhook`);
-const client = urlObj.protocol === 'https:' ? https : http;
+let verificationId = readArg(['--verification-id', '--id']);
+let token = readArg(['--token']);
+let messageBody = readArg(['--body', '--message']);
 
-const options = {
-  hostname: urlObj.hostname,
-  port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-  path: urlObj.pathname + urlObj.search,
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(payloadString),
-    ...(signature ? { 'x-hub-signature-256': signature } : {})
+const buildSpacedTokenMessage = (value) => {
+  const normalized = normalizeVerificationToken(value);
+
+  if (!normalized) {
+    return value;
+  }
+
+  return normalized.replace(/^CM-([A-Z0-9]{2})([A-Z0-9]{3})$/, 'CM-$1 $2');
+};
+
+const printUsageAndExit = () => {
+  console.error(
+    [
+      'Usage:',
+      '  node scripts/test-whatsapp-webhook.js --verification-id <uuid> --token <CM-XXXXX> [--base-url <url>]',
+      '  node scripts/test-whatsapp-webhook.js --start-register --phone <phone> [--base-url <url>]',
+      '',
+      'Optional:',
+      '  --body "CM-27 LEG"      Message body sent to /webhook.',
+      '  --body-spaced          Send the generated token with an internal space.',
+      '  --sender 237657262038  Simulated WhatsApp sender phone.',
+    ].join('\n')
+  );
+  process.exit(1);
+};
+
+const buildRegistrationPayload = () => ({
+  full_name: readArg(['--name'], 'Webhook Test User'),
+  phone_number: readArg(['--phone'], senderPhone),
+  quarter: readArg(['--quarter'], 'Test Quarter'),
+  location_permission: false,
+  emergency_contact: {
+    contact_name: readArg(['--contact-name'], 'Webhook Test Contact'),
+    phone_number: readArg(['--contact-phone'], senderPhone),
+    relationship: readArg(['--relationship'], 'Friend'),
+  },
+});
+
+const parseJsonResponse = async (response) => {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
   }
 };
 
-const req = client.request(options, (res) => {
-  console.log(`[test-webhook] Webhook response status: ${res.statusCode}`);
-  let data = '';
-  res.on('data', (chunk) => {
-    data += chunk;
+const postJson = async (url, body, headers = {}) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    body: JSON.stringify(body),
   });
-  res.on('end', () => {
-    console.log('[test-webhook] Webhook response body:');
-    try {
-      console.log(JSON.stringify(JSON.parse(data), null, 2));
-    } catch {
-      console.log(data);
+  const data = await parseJsonResponse(response);
+  return { response, data };
+};
+
+const getJson = async (url) => {
+  const response = await fetch(url);
+  const data = await parseJsonResponse(response);
+  return { response, data };
+};
+
+const signPayload = (payloadString) => {
+  const appSecret = String(process.env.WHATSAPP_APP_SECRET || '').trim();
+
+  if (!appSecret) {
+    return null;
+  }
+
+  return `sha256=${crypto
+    .createHmac('sha256', appSecret)
+    .update(payloadString)
+    .digest('hex')}`;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const pollVerificationStatus = async () => {
+  let lastStatus = null;
+
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    const { response, data } = await getJson(
+      `${baseUrl}/api/verification/status/${verificationId}`
+    );
+    lastStatus = { httpStatus: response.status, data };
+
+    const status = data.status;
+    const verified = data.verified === true || status === 'verified';
+    if (verified || status === 'expired' || status === 'failed') {
+      return lastStatus;
     }
-  });
-});
 
-req.on('error', (e) => {
-  console.error(`[test-webhook] Request failed: ${e.message}`);
-});
+    await sleep(1000);
+  }
 
-req.write(payloadString);
-req.end();
+  return lastStatus;
+};
+
+const main = async () => {
+  if (hasFlag('--help') || !baseUrl) {
+    printUsageAndExit();
+  }
+
+  if ((!verificationId || !token) && hasFlag('--start-register')) {
+    const registrationPayload = buildRegistrationPayload();
+    const { response, data } = await postJson(
+      `${baseUrl}/api/auth/register/start-verification`,
+      registrationPayload
+    );
+
+    if (!response.ok || data.success !== true) {
+      console.error('[test-webhook] start-verification failed');
+      console.error(JSON.stringify(data, null, 2));
+      process.exit(1);
+    }
+
+    verificationId = data.verificationId;
+    token = data.token;
+    console.log(`[test-webhook] Created pending verificationId=${verificationId}`);
+  }
+
+  if (!verificationId || !token) {
+    printUsageAndExit();
+  }
+
+  messageBody = messageBody || (hasFlag('--body-spaced') ? buildSpacedTokenMessage(token) : token);
+  const normalizedToken = normalizeVerificationToken(messageBody);
+
+  const payload = {
+    entry: [
+      {
+        changes: [
+          {
+            value: {
+              messages: [
+                {
+                  from: senderPhone,
+                  type: 'text',
+                  text: {
+                    body: messageBody,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const payloadString = JSON.stringify(payload);
+  const signature = signPayload(payloadString);
+
+  console.log(`[test-webhook] baseUrl=${baseUrl}`);
+  console.log(`[test-webhook] verificationId=${verificationId}`);
+  console.log(`[test-webhook] messageBody=${messageBody}`);
+  console.log(`[test-webhook] normalizedToken=${normalizedToken ?? 'none'}`);
+
+  const { response: webhookResponse, data: webhookData } = await postJson(
+    `${baseUrl}/webhook`,
+    payload,
+    signature ? { 'x-hub-signature-256': signature } : {}
+  );
+
+  console.log(`[test-webhook] webhookHttpStatus=${webhookResponse.status}`);
+  if (!webhookResponse.ok) {
+    console.error('[test-webhook] webhook failed');
+    console.error(JSON.stringify(webhookData, null, 2));
+    process.exit(1);
+  }
+
+  const statusResult = await pollVerificationStatus();
+  const statusData = statusResult?.data ?? {};
+  const verified = statusData.verified === true || statusData.status === 'verified';
+
+  console.log(
+    `[test-webhook] statusEndpoint httpStatus=${statusResult?.httpStatus} status=${statusData.status} verified=${statusData.verified}`
+  );
+  console.log(
+    `[test-webhook] session=${statusData.session ? 'present' : 'missing'} authToken=${
+      statusData.authToken ? 'present' : 'missing'
+    } user=${statusData.user ? 'present' : 'missing'}`
+  );
+
+  if (normalizedToken && verified) {
+    console.log('VERIFIED');
+    return;
+  }
+
+  console.error('FAILED');
+  process.exit(1);
+};
+
+main().catch((error) => {
+  console.error(`[test-webhook] FAILED: ${error.message}`);
+  process.exit(1);
+});

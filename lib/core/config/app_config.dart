@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
+  static const String _productionApiBaseUrl =
+      'https://guidiannode-production.up.railway.app';
   static const String _androidEmulatorApiBaseUrl = 'http://10.0.2.2:3000';
   static const String _loopbackApiBaseUrl = 'http://127.0.0.1:3000';
   static const String _androidEmulatorApiAuthBaseUrl =
@@ -46,6 +48,10 @@ class AppConfig {
 
     if (_apiAuthBaseUrlOverride.isNotEmpty) {
       return _deriveBaseUrlFromAuthUrl(_apiAuthBaseUrlOverride);
+    }
+
+    if (kReleaseMode) {
+      return _productionApiBaseUrl;
     }
 
     if (defaultTargetPlatform == TargetPlatform.android) {

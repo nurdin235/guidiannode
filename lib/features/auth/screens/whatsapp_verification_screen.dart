@@ -68,8 +68,7 @@ class _WhatsappVerificationScreenState
     _whatsappUrl = widget.whatsappUrl;
     _initExpiry();
     _startTimers();
-    // Immediate initial poll
-    _pollStatus();
+    unawaited(_pollStatus());
   }
 
   @override
@@ -117,7 +116,8 @@ class _WhatsappVerificationScreenState
             _timeLeft = Duration.zero;
             _status = 'expired';
             _cancelTimers();
-            _message = 'Your verification link has expired. Please request a new one.';
+            _message =
+                'Your verification link has expired. Please request a new one.';
           }
         }
       });
@@ -135,6 +135,9 @@ class _WhatsappVerificationScreenState
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     _lastCheckedTimer?.cancel();
+    _pollTimer = null;
+    _countdownTimer = null;
+    _lastCheckedTimer = null;
   }
 
   String _formatDuration(Duration duration) {
@@ -152,7 +155,7 @@ class _WhatsappVerificationScreenState
   }
 
   Future<void> _pollStatus({bool manual = false}) async {
-    if (_isPolling || (_status == 'expired' && !manual)) {
+    if (_isPolling || (['expired', 'failed'].contains(_status) && !manual)) {
       return;
     }
 
@@ -171,7 +174,8 @@ class _WhatsappVerificationScreenState
 
       if (response['success'] != true) {
         setState(() {
-          _message = response['message']?.toString() ??
+          _message =
+              response['message']?.toString() ??
               'Verification status could not be refreshed.';
         });
         return;
@@ -181,10 +185,10 @@ class _WhatsappVerificationScreenState
 
       if (response['verified'] == true || status == 'verified') {
         _cancelTimers();
-        final session = response['session'];
+        final session = _sessionFromVerifiedResponse(response);
 
-        if (session is Map) {
-          widget.onVerified(Map<String, dynamic>.from(session));
+        if (session != null) {
+          widget.onVerified(session);
           return;
         }
 
@@ -199,7 +203,19 @@ class _WhatsappVerificationScreenState
         setState(() {
           _status = 'expired';
           _timeLeft = Duration.zero;
-          _message = 'Your verification link has expired. Please request a new one.';
+          _message =
+              'Your verification link has expired. Please request a new one.';
+        });
+        return;
+      }
+
+      if (status == 'failed') {
+        _cancelTimers();
+        setState(() {
+          _status = 'failed';
+          _message =
+              response['message']?.toString() ??
+              'Verification failed. Please generate a new link.';
         });
         return;
       }
@@ -260,7 +276,8 @@ class _WhatsappVerificationScreenState
       if (response['success'] != true) {
         StatusSnackbar.show(
           context,
-          message: response['message']?.toString() ??
+          message:
+              response['message']?.toString() ??
               'A new verification link could not be created.',
           tone: StatusTone.error,
         );
@@ -270,7 +287,9 @@ class _WhatsappVerificationScreenState
       final verificationId = response['verificationId']?.toString();
       final token = response['token']?.toString();
       final whatsappUrl = response['whatsappUrl']?.toString();
-      final expiresAt = response['expiresAt']?.toString() ?? response['expires_at']?.toString();
+      final expiresAt =
+          response['expiresAt']?.toString() ??
+          response['expires_at']?.toString();
 
       if (verificationId == null || token == null || whatsappUrl == null) {
         StatusSnackbar.show(
@@ -295,9 +314,13 @@ class _WhatsappVerificationScreenState
         } else {
           _expiryTime = DateTime.now().add(const Duration(minutes: 10));
         }
+        _timeLeft = _expiryTime!.difference(DateTime.now());
+        if (_timeLeft.isNegative) {
+          _timeLeft = Duration.zero;
+        }
       });
       _startTimers();
-      _pollStatus();
+      unawaited(_pollStatus());
     } finally {
       if (mounted) {
         setState(() => _isRequestingNew = false);
@@ -308,15 +331,21 @@ class _WhatsappVerificationScreenState
   @override
   Widget build(BuildContext context) {
     final isExpired = _status == 'expired';
-    final showWarning = !isExpired && _secondsElapsedSinceStart > 30;
+    final isFailed = _status == 'failed';
+    final showWarning =
+        !isExpired && !isFailed && _secondsElapsedSinceStart > 30;
 
     return AuthScaffold(
       eyebrow: 'WhatsApp authentication',
       title: widget.title,
       subtitle: widget.subtitle,
       badge: AuthHeroBadge(
-        label: isExpired ? 'Link expired' : 'Waiting on WhatsApp',
-        tone: isExpired ? StatusTone.warning : StatusTone.action,
+        label: isExpired
+            ? 'Link expired'
+            : isFailed
+            ? 'Verification failed'
+            : 'Waiting on WhatsApp',
+        tone: isExpired || isFailed ? StatusTone.warning : StatusTone.action,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -385,19 +414,27 @@ class _WhatsappVerificationScreenState
           ),
           const SizedBox(height: AppSpacing.md),
           InfoBanner(
-            title: isExpired ? 'Expired' : 'Expires in: ${_formatDuration(_timeLeft)}',
+            title: isExpired
+                ? 'Expired'
+                : 'Expires in: ${_formatDuration(_timeLeft)}',
             message: 'This verification link is active for 10 minutes.',
           ),
           const SizedBox(height: AppSpacing.md),
           StatusBanner(
-            title: isExpired ? 'Expired' : 'Waiting for WhatsApp',
+            title: isExpired
+                ? 'Expired'
+                : isFailed
+                ? 'Verification failed'
+                : 'Waiting for WhatsApp',
             message: showWarning
                 ? 'Still waiting. Make sure the message was sent to the GuardianNode business number (+237 6 57 26 20 38).'
                 : _message,
-            tone: isExpired ? StatusTone.warning : (showWarning ? StatusTone.warning : StatusTone.info),
+            tone: isExpired || isFailed
+                ? StatusTone.warning
+                : (showWarning ? StatusTone.warning : StatusTone.info),
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (!isExpired)
+          if (!isExpired && !isFailed)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
               child: Row(
@@ -422,25 +459,25 @@ class _WhatsappVerificationScreenState
             ),
           const SizedBox(height: AppSpacing.xl),
           PrimaryButton(
-            text: _whatsappOpened ? 'Open WhatsApp again' : 'Verify via WhatsApp',
+            text: _whatsappOpened ? 'Open WhatsApp again' : 'Open WhatsApp',
             icon: Icons.chat_rounded,
             isLoading: _isOpeningWhatsapp,
-            onPressed: isExpired ? null : _openWhatsapp,
+            onPressed: (isExpired || isFailed) ? null : _openWhatsapp,
           ),
-          if (!isExpired) ...[
+          if (!isExpired && !isFailed) ...[
             const SizedBox(height: AppSpacing.md),
             AppButton(
-              label: 'Check verification status',
+              label: 'I have sent the message — Check now',
               icon: Icons.check_circle_outline_rounded,
               tone: AppButtonTone.secondary,
               isLoading: _isPolling,
               onPressed: () => _pollStatus(manual: true),
             ),
           ],
-          if (isExpired) ...[
+          if (isExpired || isFailed) ...[
             const SizedBox(height: AppSpacing.md),
             AppButton(
-              label: 'Request a new link',
+              label: 'Generate new link',
               icon: Icons.refresh_rounded,
               tone: AppButtonTone.outline,
               isLoading: _isRequestingNew,
@@ -450,5 +487,26 @@ class _WhatsappVerificationScreenState
         ],
       ),
     );
+  }
+
+  Map<String, dynamic>? _sessionFromVerifiedResponse(
+    Map<String, dynamic> response,
+  ) {
+    final session = response['session'];
+    if (session is Map) {
+      return Map<String, dynamic>.from(session);
+    }
+
+    final authToken = response['authToken']?.toString();
+    final user = response['user'];
+    if (authToken == null || authToken.isEmpty || user is! Map) {
+      return null;
+    }
+
+    return {
+      'access_token': authToken,
+      'token_type': 'Bearer',
+      'user': Map<String, dynamic>.from(user),
+    };
   }
 }

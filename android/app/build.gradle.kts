@@ -49,11 +49,12 @@ fun readDartDefines(): Map<String, String> {
 }
 
 val dartDefines = readDartDefines()
+val defaultProductionApiBaseUrl = "https://guidiannode-production.up.railway.app"
 val productionApiBaseUrl =
     dartDefines["API_BASE_URL"]
         ?: dartDefines["VITE_API_BASE_URL"]
         ?: dartDefines["API_AUTH_BASE_URL"]
-        ?: ""
+        ?: defaultProductionApiBaseUrl
 
 fun looksLikeLocalApiUrl(value: String): Boolean {
     val normalizedValue = value.lowercase()
@@ -134,12 +135,6 @@ afterEvaluate {
                     "Release builds require android/key.properties with storeFile, " +
                         "storePassword, keyAlias, and keyPassword. Create an upload " +
                         "keystore before building for Play Store."
-                )
-            }
-
-            if (productionApiBaseUrl.isBlank()) {
-                throw GradleException(
-                    "Release builds require --dart-define=API_BASE_URL=https://<your-production-api>."
                 )
             }
 
